@@ -37,21 +37,22 @@ async def recibir_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 1. Obtener la foto de Telegram
     photo_file = await update.message.photo[-1].get_file()
+    # Descargamos como bytearray (editable)
     byte_array = await photo_file.download_as_bytearray()
+    # CONVERSIÓN CRÍTICA: Lo pasamos a bytes (fijo) para que Supabase lo acepte
+    imagen_final = bytes(byte_array)
     
     # 2. Subir a Supabase Storage
-    # Nombre único para el archivo
     file_name = f"{user.id}_{photo_file.file_unique_id}.jpg"
     bucket_name = "fotos-pizza"
     
     try:
-        # Subimos el archivo (reemplaza si existe)
+        # Subimos el archivo usando imagen_final (bytes)
         supabase.storage.from_(bucket_name).upload(
             path=file_name, 
-            file=byte_array, 
+            file=imagen_final, 
             file_options={"content-type": "image/jpeg", "upsert": "true"}
         )
-        # Obtenemos la URL pública
         public_url = supabase.storage.from_(bucket_name).get_public_url(file_name)
     except Exception as e:
         await update.message.reply_text(f"Error subiendo imagen: {e}")
@@ -65,17 +66,19 @@ async def recibir_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Ejemplo: Texto 1... ||| Texto 2... ||| Texto 3...
     """
     
-    # Gemini 1.5 Flash puede leer imágenes desde bytes
-    response = model.generate_content([
-        {'mime_type': 'image/jpeg', 'data': byte_array},
-        prompt
-    ])
-    
-    texto_generado = response.text
+    try:
+        response = model.generate_content([
+            {'mime_type': 'image/jpeg', 'data': imagen_final},
+            prompt
+        ])
+        texto_generado = response.text
+    except Exception as e:
+        await update.message.reply_text(f"Error en IA: {e}")
+        return ConversationHandler.END
+
     # Separamos las opciones
     try:
         opciones = texto_generado.split('|||')
-        # Limpieza básica
         if len(opciones) < 3:
             opciones = [texto_generado, "Opción 2 genérica", "Opción 3 genérica"]
     except:
@@ -85,7 +88,7 @@ async def recibir_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     opcion_2 = opciones[1].strip() if len(opciones) > 1 else "N/A"
     opcion_3 = opciones[2].strip() if len(opciones) > 2 else "N/A"
 
-    # 4. Guardar en Base de Datos Supabase (La Memoria)
+    # 4. Guardar en Base de Datos Supabase
     data = {
         "chat_id": user.id,
         "photo_url": public_url,
@@ -97,7 +100,7 @@ async def recibir_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     supabase.table("publicaciones").insert(data).execute()
 
     # 5. Mostrar al usuario
-    msg = f"🍌 **Ideas Nano Banana:**\n\n1️⃣: {opcion_1[:100]}...\n\n2️⃣: {opcion_2[:100]}...\n\n3️⃣: {opcion_3[:100]}...\n\n👇 **Elige 1, 2 o 3:**"
+    msg = f"🍌 **Ideas Nano Banana:**\n\n1️⃣: {opcion_1[:150]}...\n\n2️⃣: {opcion_2[:150]}...\n\n3️⃣: {opcion_3[:150]}...\n\n👇 **Elige 1, 2 o 3:**"
     keyboard = [["1", "2", "3"], ["Cancelar"]]
     
     await update.message.reply_text(msg, reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
@@ -166,4 +169,5 @@ def main():
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
+
     main()
