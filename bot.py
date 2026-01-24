@@ -20,7 +20,7 @@ ID_PAGINA_FACEBOOK = os.getenv("ID_PAGINA_FACEBOOK")
 # Inicializar clientes
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 genai.configure(api_key=API_KEY_GEMINI)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-1.5-flash-001')
 
 # Estados de la conversación
 ESPERANDO_FOTO, ESPERANDO_ELECCION = range(2)
@@ -171,5 +171,6 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
